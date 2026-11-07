@@ -19,7 +19,6 @@ async def _fetch_from_geocoder(address: str, client: Optional[httpx.AsyncClient]
         response = await client.get(base_url, params=query_params)
         response.raise_for_status()
         data = response.json()
-        print(json.dumps(data, indent=2))  # temporary logging
         members = data["response"]["GeoObjectCollection"]["featureMember"]
         if not members: return None
         lon_str, lat_str = members[0]["GeoObject"]["Point"]["pos"].split()

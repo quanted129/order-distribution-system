@@ -1,9 +1,14 @@
+import asyncio
+import logging
+from typing import Optional
 from google import genai
 from google.genai import types
+
 from schemas import ParsedOrder
 import config
 
-client = genai.Client(api_key=config.GEMINI_API_KEY)
+logger = logging.getLogger(__name__)
+client = genai.Client(api_key=config.GEMINI_API_KEY, http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)))
 
 SYSTEM_INSTRUCTION = """
 Используй следующие правила обработки данных заказа:
@@ -16,20 +21,28 @@ SYSTEM_INSTRUCTION = """
 Поле is_valid_order является проверкой на действительность заказа по косвенным данным. На ряду с заказами в выше указанном формате может быть отправлено обычное текстовое сообщение без намерения сообщить информацию о готовом зазаке, например, обычное сообщение из диалога, или уведомление, или пометка, или намерение отправить заявку без её явного отправления в доставку (в таком случае будут вопросы к администратору по типу "сможем принять?" или "возможно ли перевезти такие габариты?" или "успеете к назначенному интервалу?") - в таких случаях сообщение не является готовой к обработке заявкой, и поля выше могут быть None, и поле is_valid_order должно быть false. Если заявка действительна, то is_valid_order должно быть true.
 """
 
-async def parse_order_from_text(raw_text: str) -> ParsedOrder:
-    try:
-        interaction = await client.aio.interactions.create(
-            model="gemini-3.8-flash",
-            input=f"Предоставь полную информацию о следующем заказе: {raw_text}. {SYSTEM_INSTRUCTION}",
-            generation_config={"thinking_level": "low"},
-            response_format={
-                "type": "text",
-                "mime_type": "application/json",
-                "schema": ParsedOrder.model_json_schema()
-            },
-        )
-    except:  # Look at error message at identify how to handle an exception, retry the call 3 times and fall back to 3.5-flash-lite
-        pass
+async def parse_order_from_text(raw_text: str) -> Optional[ParsedOrder]:
+    models_cycle = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.5-flash-lite", "gemini-3.1-flash-lite"]
 
-    order = ParsedOrder.model_validate_json(interaction.output_text)
-    return order
+    for model in models_cycle:
+        try:
+            interaction = await client.aio.interactions.create(
+                model=model,
+                input=f"Предоставь полную информацию о следующем заказе: {raw_text}. {SYSTEM_INSTRUCTION}",
+                generation_config={"thinking_level": "low"},
+                response_format={
+                    "type": "text",
+                    "mime_type": "application/json",
+                    "schema": ParsedOrder.model_json_schema()
+                },
+                timeout=15
+            )
+
+            return ParsedOrder.model_validate_json(interaction.output_text)
+
+        except Exception as err:
+            logger.warning(f"Model {model} failed: {err}, trying next...")
+            await asyncio.sleep(1)
+
+    logger.error("Unable to parse order from text")
+    return None
