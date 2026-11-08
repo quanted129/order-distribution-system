@@ -5,9 +5,12 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.14"
 dependencies = [
+    "alembic",
+    "asyncpg",
     "google-genai",
     "httpx",
     "pydantic",
     "python-dotenv",
     "python-telegram-bot",
+    "sqlalchemy[asyncio]",
 ]

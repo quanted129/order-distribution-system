@@ -20,7 +20,9 @@ async def _fetch_from_geocoder(address: str, client: Optional[httpx.AsyncClient]
         response.raise_for_status()
         data = response.json()
         members = data["response"]["GeoObjectCollection"]["featureMember"]
-        if not members: return None
+        if not members:
+            logger.warning("Coordinates could not be resolved for address: %s", address)
+            return None
         lon_str, lat_str = members[0]["GeoObject"]["Point"]["pos"].split()
         return float(lat_str), float(lon_str)
     except httpx.HTTPError:
