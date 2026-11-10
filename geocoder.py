@@ -1,7 +1,6 @@
 from typing import Optional
 import httpx
 import config
-import json
 import logging
 
 logger = logging.getLogger(__name__)

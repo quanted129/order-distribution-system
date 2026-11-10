@@ -18,7 +18,7 @@ A logistics automation tool designed to distribute orders efficiently in real-ti
 - **Database**: PostgreSQL, `sqlalchemy[asyncio]`, `asyncpg`, `alembic`
 - **Bot interface**: `python-telegram-bot`
 - **Generative AI and structured output**: `google-genai`, `pydantic`
-- **External APIs**: Yandex Geocoder (`httpx`)
+- **External APIs**: Yandex Geocoder, OSRM (`httpx`)
 
 ## Installation & Setup
 
@@ -49,7 +49,7 @@ Make sure your PostgreSQL database is created, then apply the schema migrations:
 uv run alembic upgrade head
 ```
 
-### 3. Launch the bot
+### 4. Launch the bot
 ```bash
 uv run python main.py
 ```

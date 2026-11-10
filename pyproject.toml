@@ -9,6 +9,7 @@ dependencies = [
     "asyncpg",
     "google-genai",
     "httpx",
+    "ortools",
     "pydantic",
     "python-dotenv",
     "python-telegram-bot",

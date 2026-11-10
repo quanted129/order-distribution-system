@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone, timedelta
 from database import AsyncSessionLocal
 from typing import Optional
-from models import Shop, Driver, Order
+from models import Shop, Order
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -26,20 +26,32 @@ async def resolve_shop(session: AsyncSession, chat_id: int, topic_id: Optional[i
 
 
 def parse_time_interval(time_interval: Optional[str]) -> tuple[Optional[datetime], Optional[datetime]]:
-    now = datetime.now(SHOP_TIMEZONE)
     if not time_interval: return None, None
-    if time_interval.startswith("к "):
-        hour, minute = map(int, time_interval[2:].strip().split(':'))
-        dt_exact = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        return None, dt_exact
-    elif '-' in time_interval:
-        time_interval_start, time_interval_end = map(str, time_interval.strip().split('-'))
-        hour_start, minute_start = map(int, time_interval_start.strip().split(':'))
-        hour_end, minute_end = map(int, time_interval_end.strip().split(':'))
-        dt_start = now.replace(hour=hour_start, minute=minute_start, second=0, microsecond=0)
-        dt_end = now.replace(hour=hour_end, minute=minute_end, second=0, microsecond=0)
-        return dt_start, dt_end
-    else:
+    now = datetime.now(SHOP_TIMEZONE)
+    base_date = now + timedelta(days=1) if now.hour >= 21 else now
+
+    def to_dt(hh_mm: str) -> datetime:
+        hour, minute = map(int, hh_mm.strip().split(':'))
+        return base_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    try:
+        if time_interval.startswith("к "):
+            dt_exact = to_dt(time_interval[2:])
+            if dt_exact <= now:
+                dt_exact += timedelta(days=1)
+            return None, dt_exact
+
+        if '-' in time_interval:
+            start_str, end_str = time_interval.split('-')
+            dt_start, dt_end = to_dt(start_str), to_dt(end_str)
+            if dt_end <= now:
+                dt_start += timedelta(days=1)
+                dt_end += timedelta(days=1)
+            return dt_start, dt_end
+
+        return None, None
+    except ValueError:
+        logger.warning("Could not parse time_interval: %s", time_interval)
         return None, None
 
 
@@ -49,40 +61,44 @@ async def handle_order_message(update: Update, context: ContextTypes.DEFAULT_TYP
 
     chat_id = update.message.chat.id
     topic_id = update.message.message_thread_id
-    logger.info(f"Received message in chat_id={chat_id}, topic_id={topic_id}")
+    # logger.info("Received message in chat_id=%s, topic_id=%s", chat_id, topic_id)
+    # use this to define new shops in the database
+    # TODO: shop adding instructions
 
     async with AsyncSessionLocal() as session:
         shop_id = await resolve_shop(session, chat_id, topic_id)
-        if shop_id is None:
-            return
 
-        parsed_order = await parser.parse_order_from_text(update.message.text)
-        if parsed_order is None or not parsed_order.is_valid_order:
-            logger.info("Message ignored: not a valid order.")
-            return
+    if shop_id is None:
+        return
 
-        if parsed_order.address:
-            client = context.bot_data.get("http_client")
-            coords = await geocoder.get_coordinates(parsed_order.address, client=client)
-            if coords is not None:
-                parsed_order.latitude, parsed_order.longitude = coords
-        else:
-            logger.info("Message ignored: no address detected.")
-            return
+    parsed_order = await parser.parse_order_from_text(update.message.text)
+    if parsed_order is None or not parsed_order.is_valid_order:
+        logger.info("Message ignored: not a valid order.")
+        return
 
-        start_time, end_time = parse_time_interval(parsed_order.time_interval)
+    if parsed_order.address:
+        client = context.bot_data.get("http_client")
+        coords = await geocoder.get_coordinates(parsed_order.address, client=client)
+        if coords is not None:
+            parsed_order.latitude, parsed_order.longitude = coords
+    else:
+        logger.info("Message ignored: no address detected.")
+        return
 
-        order = Order(
-            shop_id=shop_id,
-            latitude=parsed_order.latitude,
-            longitude=parsed_order.longitude,
-            address=parsed_order.address,
-            start_time=start_time,
-            end_time=end_time,
-            item_info=parsed_order.order_contents,
-            driver_info=parsed_order.driver_details
-        )
+    start_time, end_time = parse_time_interval(parsed_order.time_interval)
 
+    order = Order(
+        shop_id=shop_id,
+        latitude=parsed_order.latitude,
+        longitude=parsed_order.longitude,
+        address=parsed_order.address,
+        start_time=start_time,
+        end_time=end_time,
+        item_info=parsed_order.order_contents,
+        driver_info='\n'.join(filter(None, [parsed_order.driver_details, parsed_order.payment_status])) or None
+    )
+
+    async with AsyncSessionLocal() as session:
         session.add(order)
         await session.commit()
 
