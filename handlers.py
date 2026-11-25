@@ -1,37 +1,44 @@
 import logging
-import geocoder
-import parser
-from telegram import Update
-from telegram.ext import ContextTypes
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timezone, timedelta
+from telegram import Update
+from telegram.ext import ContextTypes
+
+import geocoder
+import parser
 from database import AsyncSessionLocal
-from typing import Optional
-from models import Shop, Order
+from models import Order, Shop
 
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
 SHOP_TIMEZONE = timezone(timedelta(hours=3))  # static timezone UTC+3
 
 
-async def resolve_shop(session: AsyncSession, chat_id: int, topic_id: Optional[int]) -> Optional[int]:
-    query = select(Shop.shop_id).where(Shop.telegram_chat_id == chat_id, Shop.telegram_topic_id == topic_id)
+async def resolve_shop(
+    session: AsyncSession, chat_id: int, topic_id: int | None
+) -> int | None:
+    query = select(Shop.shop_id).where(
+        Shop.telegram_chat_id == chat_id, Shop.telegram_topic_id == topic_id
+    )
     result = await session.execute(query)
     return result.scalar_one_or_none()
 
 
-def parse_time_interval(time_interval: Optional[str]) -> tuple[Optional[datetime], Optional[datetime]]:
-    if not time_interval: return None, None
+def parse_time_interval(
+    time_interval: str | None,
+) -> tuple[datetime | None, datetime | None]:
+    if not time_interval:
+        return None, None
     now = datetime.now(SHOP_TIMEZONE)
     base_date = now + timedelta(days=1) if now.hour >= 21 else now
 
     def to_dt(hh_mm: str) -> datetime:
-        hour, minute = map(int, hh_mm.strip().split(':'))
+        hour, minute = map(int, hh_mm.strip().split(":"))
         return base_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
     try:
@@ -41,8 +48,8 @@ def parse_time_interval(time_interval: Optional[str]) -> tuple[Optional[datetime
                 dt_exact += timedelta(days=1)
             return None, dt_exact
 
-        if '-' in time_interval:
-            start_str, end_str = time_interval.split('-')
+        if "-" in time_interval:
+            start_str, end_str = time_interval.split("-")
             dt_start, dt_end = to_dt(start_str), to_dt(end_str)
             if dt_end <= now:
                 dt_start += timedelta(days=1)
@@ -55,7 +62,9 @@ def parse_time_interval(time_interval: Optional[str]) -> tuple[Optional[datetime
         return None, None
 
 
-async def handle_order_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def handle_order_message(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     if not update.message or not update.message.text:
         return
 
@@ -95,7 +104,10 @@ async def handle_order_message(update: Update, context: ContextTypes.DEFAULT_TYP
         start_time=start_time,
         end_time=end_time,
         item_info=parsed_order.order_contents,
-        driver_info='\n'.join(filter(None, [parsed_order.driver_details, parsed_order.payment_status])) or None
+        driver_info="\n".join(
+            filter(None, [parsed_order.driver_details, parsed_order.payment_status])
+        )
+        or None,
     )
 
     async with AsyncSessionLocal() as session:

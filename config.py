@@ -1,4 +1,5 @@
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,4 +15,6 @@ DB_NAME: str = os.environ["DB_NAME"]
 DB_USER: str = os.environ["DB_USER"]
 DB_PASSWORD: str = os.environ["DB_PASSWORD"]
 
-DATABASE_URL: str = f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+DATABASE_URL: str = (
+    f"postgresql+asyncpg://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+)

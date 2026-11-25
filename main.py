@@ -1,5 +1,6 @@
-from telegram.ext import Application, ApplicationBuilder, MessageHandler, filters
 import httpx
+from telegram.ext import Application, ApplicationBuilder, MessageHandler, filters
+
 import config
 import handlers
 
@@ -23,10 +24,13 @@ def main() -> None:
         .concurrent_updates(True)
         .build()
     )
-    message_handler = MessageHandler(filters.TEXT & (~filters.COMMAND), handlers.handle_order_message)
+    message_handler = MessageHandler(
+        filters.TEXT & (~filters.COMMAND), handlers.handle_order_message
+    )
     application.add_handler(message_handler)
 
     application.run_polling()
+
 
 if __name__ == "__main__":
     main()

@@ -1,17 +1,20 @@
-from typing import Optional
-import httpx
-import config
 import logging
+
+import httpx
+
+import config
 
 logger = logging.getLogger(__name__)
 
 
-async def _fetch_from_geocoder(address: str, client: Optional[httpx.AsyncClient] = None) -> Optional[tuple[float, float]]:
+async def _fetch_from_geocoder(
+    address: str, client: httpx.AsyncClient
+) -> tuple[float, float] | None:
     base_url = config.YANDEX_GEOCODER_URL
     query_params = {
         "apikey": config.YANDEX_API_KEY,
         "geocode": address if "беларусь" in address.lower() else f"Беларусь, {address}",
-        "format": "json"
+        "format": "json",
     }
 
     try:
@@ -25,16 +28,20 @@ async def _fetch_from_geocoder(address: str, client: Optional[httpx.AsyncClient]
         lon_str, lat_str = members[0]["GeoObject"]["Point"]["pos"].split()
         return float(lat_str), float(lon_str)
     except httpx.HTTPError:
-        logger.error("Error establishing HTTP connection at the start of a geocoder call.")
+        logger.error(
+            "Error establishing HTTP connection at the start of a geocoder call."
+        )
         return None
-    except Exception as err:
+    except Exception:
         logger.exception("Geocoding failed for address: %s", address)
         return None
 
 
-async def get_coordinates(address: str, client: Optional[httpx.AsyncClient] = None) -> Optional[tuple[float, float]]:
+async def get_coordinates(
+    address: str, client: httpx.AsyncClient | None = None
+) -> tuple[float, float] | None:
     if client is not None:
-         return await _fetch_from_geocoder(address, client)
+        return await _fetch_from_geocoder(address, client)
 
     async with httpx.AsyncClient() as new_client:
         return await _fetch_from_geocoder(address, new_client)
